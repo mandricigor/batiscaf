@@ -2,6 +2,7 @@
 # this is the class which solves orientation problem
 
 import sys
+import argparse
 import cplex
 import math
 import networkx as nx
@@ -99,13 +100,7 @@ def orient(graph):
 
 
     for node in graph.nodes():
-        #cpx.objective.set_linear("X#%s" % node, graph.nodes[node]["width"] * 1.0 / (0.000000001 + graph.nodes[node]["score"]))
-        #cpx.objective.set_linear("X#%s" % node, 1.0 / (1 + graph.nodes[node]["width"] * graph.nodes[node]["score"]))
         cpx.objective.set_linear("X#%s" % node, graph.nodes[node]["width"])
-        #cpx.objective.set_linear("X#%s" % node, 1.0 / (1 + graph.nodes[node]["score"]))
-
-    #for ee1, ee2 in graph.edges():
-    #    cpx.objective.set_linear("Z#%s#%s" % (ee1, ee2), graph[ee1][ee2]["weight"])
 
     cpx.objective.set_sense(cpx.objective.sense.minimize)
     cpx.set_problem_type(cpx.problem_type.MILP)
@@ -127,33 +122,35 @@ def orient(graph):
             print x
     print len(toremove) / 2, "I REMOVED THIS MANY REPEATS"
     return toremove
-  
-
-#gg = nx.read_graphml("../RECOMB2018/hsapiens-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/soap2-fijiensis-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/fijiensis-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/rhodobacter-97-200-stranded.graphml")
-gg = nx.read_graphml("soap2-rhodobacter-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/scaffmatch-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/graminicola-97-200-stranded.graphml")
-#gg = nx.read_graphml("../RECOMB2018/soap2-graminicola-97-200-stranded.graphml")
 
 
-"""
-with open("scores") as f:
-    a = f.readlines()
-a = map(lambda x: x.strip().split(), a)
-adict = {}
-for x, y, z in a:
-    adict[x] = float(z)
 
-for node in gg.nodes():
-    gg.nodes[node]["score"] = adict[node[:-2]]
-"""
+
+parser = argparse.ArgumentParser(description='BATISCAF - BAd conTIg removal SCAFfolder.')
+#parser.add_argument('integers', metavar='N', type=int, nargs='+',
+#                            help='an integer for the accumulator')
+group_required = parser.add_argument_group('required arguments')
+group_required.add_argument('--graph', dest='scaffolding_graph', type=str, required=True, help='scaffolding graph')
+group_required.add_argument('--fasta', dest='fasta', type=str, default='output.scaffolds.batiscaf.fasta', help='output fasta file')
+
+#group_optional = parser.add_argument_group('optional arguments')
+parser.add_argument('--filter_threshold', dest='filter_threshold', type=int, required=False, default=5, help='filter out edges with weight less than this value (default 5)')
+
+args = parser.parse_args()
+
+
+
+
+
+
+# handle the arguments
+gg = nx.read_graphml(args.scaffolding_graph)
+output_fasta = args.fasta
+filter_threshold = args.filter_threshold
 
 toremove = []
 for x, y in gg.edges():
-    if gg[x][y]["weight"] < 5:
+    if gg[x][y]["weight"] < filter_threshold:
         toremove.append((x, y))
 for x, y in toremove:
     gg.remove_edge(x, y)
@@ -175,7 +172,6 @@ for node in gg.nodes():
         matching[(maximum[0], node)] = maximum[1]
         wws.append(maximum[1])
 
-print max(wws), min(wws), "WWS"
 
 toremove = []
 for e1, e2 in gg.edges():
@@ -342,7 +338,7 @@ for cc in nx.connected_components(gg2):
         print neighs, "THIS IS NEIGHS"
         for nei in neighs:
             print nei, st, gg_orig[nei][st]["weight"], nei in strands
-        for nn in [n for n in neighs if gg_orig[st][n]["weight"] > 5 and n not in path]:
+        for nn in [n for n in neighs if gg_orig[st][n]["weight"] > filter_threshold and n not in path]:
             conts.add(nn[:-2])
 
     # handle the ends of scaffolds
@@ -350,11 +346,11 @@ for cc in nx.connected_components(gg2):
     scaf_ends[ccc]["start"] = set()
     scaf_ends[ccc]["end"] = set()
     neighs = list(gg_praorig.neighbors(path[0]))
-    for nn in [n for n in neighs if gg_praorig[path[0]][n]["weight"] > 5 and n not in path]:
+    for nn in [n for n in neighs if gg_praorig[path[0]][n]["weight"] > filter_threshold and n not in path]:
         scaf_ends[ccc]["start"].add(nn[:-2])
     scaf_ends[ccc]["start"].add(path[0][:-2])
     neighs = list(gg_praorig.neighbors(path[-1]))
-    for nn in [n for n in neighs if gg_praorig[path[-1]][n]["weight"] > 5 and n not in path]:
+    for nn in [n for n in neighs if gg_praorig[path[-1]][n]["weight"] > filter_threshold and n not in path]:
         scaf_ends[ccc]["end"].add(nn[:-2])
     scaf_ends[ccc]["end"].add(path[-1][:-2])
 
@@ -364,29 +360,13 @@ for cc in nx.connected_components(gg2):
         strands2.extend([cc + "_1", cc + "_2"])
     subg = nx.Graph(gg_orig.subgraph(strands2 + strands))
 
-    """
-    conts = set()
-    for st in strands:
-        neighs = list(gg_praorig.neighbors(st))
-        print neighs, "THIS IS NEIGHS"
-        #for nei in neighs:
-        #    print nei, st, gg_orig[nei][st]["weight"], nei in strands
-        for nn in [n for n in neighs if gg_praorig[st][n]["weight"] > 5 and n not in path]:
-            conts.add(nn[:-2])
-    strands2 = []
-    for cc in conts:
-        strands2.extend([cc + "_1", cc + "_2"])
-    subg = nx.Graph(gg_praorig.subgraph(strands2 + strands))
-    """
-
-
 
 
 
     toremove = []
     for e1, e2 in subg.edges():
         if e1 in strands2 or e2 in strands2:
-            if subg[e1][e2]["weight"] < 5:
+            if subg[e1][e2]["weight"] < filter_threshold:
                 toremove.append((e1, e2))
     for e1, e2 in toremove:
         subg.remove_edge(e1, e2)
@@ -877,7 +857,7 @@ for number, scaf in scaffolds.items():
     fastas.append(fasta)
 
 
-with open("output.scaffolds.repeat-aware.fasta", "w") as f:
+with open(output_fasta, "w") as f:
     for i, scaf in enumerate(fastas):
         f.write(">scaffold_%s\n" % (i + 1))
         f.write("%s\n" % scaf)
