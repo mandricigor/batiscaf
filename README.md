@@ -1,5 +1,5 @@
-# batiscaf
-BAd conTIg removal SCAFfolding
+# BATISCAF
+## BAd conTIg removal SCAFfolding
 
 
 BATISCAF is a novel repeat aware scaffolding tool. 
