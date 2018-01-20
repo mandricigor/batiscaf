@@ -130,11 +130,12 @@ parser = argparse.ArgumentParser(description='BATISCAF - BAd conTIg removal SCAF
 #parser.add_argument('integers', metavar='N', type=int, nargs='+',
 #                            help='an integer for the accumulator')
 group_required = parser.add_argument_group('required arguments')
-group_required.add_argument('--graph', dest='scaffolding_graph', type=str, required=True, help='scaffolding graph')
-group_required.add_argument('--fasta', dest='fasta', type=str, default='output.scaffolds.batiscaf.fasta', help='output fasta file')
+group_required.add_argument('--graphml', dest='scaffolding_graph', type=str, required=True, help='scaffolding graph in graphml format')
 
 #group_optional = parser.add_argument_group('optional arguments')
+parser.add_argument('--fasta', dest='fasta', type=str, default='output.scaffolds.batiscaf.fasta', help='output fasta file (default output.scaffolds.batiscaf.fasta')
 parser.add_argument('--filter_threshold', dest='filter_threshold', type=int, required=False, default=5, help='filter out edges with weight less than this value (default 5)')
+parser.add_argument('--mst', dest='mst_filtering', help="find MST (minimum spanning tree) before running BATISCAF algorithm", action="store_true")
 
 args = parser.parse_args()
 
@@ -194,13 +195,13 @@ gg_orig = gg.copy()
 
 
 # MST REMOVAL
-for x, y in gg.edges():
-    gg[x][y]["weight"] = -gg[x][y]["weight"]
-gg = nx.minimum_spanning_tree(gg)
-for x, y in gg.edges():
-    gg[x][y]["weight"] = -gg[x][y]["weight"]
+if args.mst_filtering:
+    for x, y in gg.edges():
+        gg[x][y]["weight"] = -gg[x][y]["weight"]
+    gg = nx.minimum_spanning_tree(gg)
+    for x, y in gg.edges():
+        gg[x][y]["weight"] = -gg[x][y]["weight"]
 
-# try to impute copy number scores
 
 
 toremove = orient(gg)
@@ -383,7 +384,7 @@ for cc in nx.connected_components(gg2):
     dch = nx.DiGraph()
     print order, "ORDER HERE"
     for i in range(1, len(order)):
-        distanta = chain[order[i - 1]][order[i]]["dist"]
+        distanta = max(0, chain[order[i - 1]][order[i]]["dist"])
         dch.add_edge("%s:%s" % (order[i - 1], orients[i - 1]), "%s:%s" % (order[i], orients[i]))
         dch["%s:%s" % (order[i - 1], orients[i - 1])]["%s:%s" % (order[i], orients[i])]["dist"] = distanta
         dch.nodes["%s:%s" % (order[i - 1], orients[i - 1])]["color"] = "red"
@@ -409,7 +410,7 @@ for cc in nx.connected_components(gg2):
             print "CONTINUE"
             continue
 
-        distanta = gg_praorig[ee1][ee2]["dist"]
+        distanta = max(0, gg_praorig[ee1][ee2]["dist"])
         if ordict[e2[:-2]] == "-" and e2[-1] == "2": # ot nego
             if e1[-1] == "1":
                 dch.add_edge(e2[:-2] + ":" + ordict[e2[:-2]], e1[:-2] + ":-", dist=distanta)
@@ -448,7 +449,7 @@ for cc in nx.connected_components(gg2):
 
     # add here widths for each node
     for nod in dch.nodes():
-        dch.node[nod]["width"] = gg_orig.node[nod.split(":")[0] + "_2"]["width"]
+        dch.node[nod]["width"] = gg_orig.node[":".join(nod.split(":")[:-1]) + "_2"]["width"]
 
 
     print dch.nodes(), "NODES OF DCH"
@@ -463,7 +464,7 @@ for cc in nx.connected_components(gg2):
                 toremove.append((x, y))
         transitively_removed_edges[id(dch)] = {}
         for x, y in toremove:
-            transitively_removed_edges[id(dch)][(x, y)] = dch[x][y]["dist"]
+            transitively_removed_edges[id(dch)][(x, y)] = max(0, dch[x][y]["dist"])
             dch.remove_edge(x, y)
     else:
         while True:
@@ -502,7 +503,7 @@ for cc in nx.connected_components(gg2):
                 toremove.append((x, y))
         transitively_removed_edges[id(dch)] = {}
         for x, y in toremove:
-            transitively_removed_edges[id(dch)][(x, y)] = dch[x][y]["dist"]
+            transitively_removed_edges[id(dch)][(x, y)] = max(0, dch[x][y]["dist"])
             dch.remove_edge(x, y)
    
     articulation_points = set(nx.articulation_points(dch.to_undirected()))
@@ -567,7 +568,7 @@ for cc in nx.connected_components(gg2):
             longest_path = shortest_paths_to_consider[-1]
             estimate = 0
             for ii in range(1, len(longest_path)):
-                estimate += dch[longest_path[ii - 1]][longest_path[ii]]["dist"]
+                estimate += max(0, dch[longest_path[ii - 1]][longest_path[ii]]["dist"])
             for ii in longest_path[1:-1]:
                 estimate += dch.node[ii]["width"] # this is because the gap is composed of gaps and contigs!
             transitively_removed_edges[id(dch)][(art_order[i], art_order[i + 1])] = estimate
@@ -816,7 +817,6 @@ for edge, invnode in new_edges:
 
 
 
-
 # try preliminary results - make fasta scaffolds
 
 fastas = []
@@ -826,8 +826,17 @@ for number, scaf in scaffolds.items():
     start = [x for x in scaf.nodes() if scaf.in_degree(x) == 0][0]
     print start, "THIS IS START HERE"
     beginning = start # this is to test if we can join chains
+
+    #name_parts = start.split(":")
+    #contig, orient = name_parts[:2]
     name_parts = start.split(":")
-    contig, orient = name_parts[:2]
+    if name_parts[-1] in ["+", "-"]:
+        contigg = name_parts
+    else:
+        contigg = name_parts[:-1]
+    contig, orient = ":".join(contigg[:-1]), contigg[-1]
+
+    print contig, orient
     seq = Seq(gg_orig.nodes[contig + "_1"]["seq"])
     if orient == "-":
         seq = str(seq.reverse_complement())
@@ -842,8 +851,16 @@ for number, scaf in scaffolds.items():
             prevstart, start = out_edges[0]
             print start, "BUT NOW THIS IS START"
             distance = scaf[prevstart][start]["dist"]
+            #name_parts = start.split(":")
+            #contig, orient = name_parts[:2]
+
             name_parts = start.split(":")
-            contig, orient = name_parts[:2]
+            if name_parts[-1] in ["+", "-"]:
+                contigg = name_parts
+            else:
+                contigg = name_parts[:-1]
+            contig, orient = ":".join(contigg[:-1]), contigg[-1]
+
             seq = Seq(gg_orig.nodes[contig + "_1"]["seq"])
             if orient == "-":
                 seq = str(seq.reverse_complement())
@@ -862,11 +879,11 @@ with open(output_fasta, "w") as f:
         f.write(">scaffold_%s\n" % (i + 1))
         f.write("%s\n" % scaf)
     # add the rest of them
-    j = i
-    for k in rest:
-        f.write(">scaffold_%s\n" % j)
-        f.write("%s\n" % Seq(gg_orig.nodes[k + "_1"]["seq"]))
-        j += 1
+    #j = i
+    #for k in rest:
+    #    #f.write(">scaffold_%s\n" % j)
+    #    f.write("%s\n" % Seq(gg_orig.nodes[k + "_1"]["seq"]))
+    #    j += 1
 
 print rest
 
