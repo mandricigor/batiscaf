@@ -21,8 +21,8 @@ Before running BATISCAF make sure that the following software is installed on yo
   * A short read aligner: [Bowtie](http://bowtie-bio.sourceforge.net/manual.shtml), [Bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml), [BWA](http://bio-bwa.sourceforge.net/), or another one
   * [IBM ILOG CPLEX >=12.7](https://www.ibm.com/analytics/data-science/prescriptive-analytics/cplex-optimizer) - optimizer (solving Integer Linear Programs and many other stuff)
   * [Python 2.7](https://www.python.org/download/releases/2.7/) with the following libraries:
-    ..* [NetworkX >=2.0](https://networkx.github.io/)
-    ..* [Biopython](http://biopython.org/)
+    * [NetworkX >=2.0](https://networkx.github.io/)
+    * [Biopython](http://biopython.org/)
 
 
 
@@ -40,7 +40,9 @@ Before running BATISCAF make sure that the following software is installed on yo
 
   * Next, prepare alignment files in .SAM format for the paired-end reads. We recommend using Bowtie2:
   ```
-  bowtie2 .....
+  bowtie2-build -q -f $CONTIG_FILE $INDEX_FILE
+  bowtie2 --quiet --no-hd --reorder -k 10 -q -p 10 -x $INDEX_FILE -U $READ1_FASTQ -S $SAM1_FILE
+  bowtie2 --quiet --no-hd --reorder -k 10 -q -p 10 -x $INDEX_FILE -U $READ2_FASTQ -S $SAM2_FILE
   ```
 
   * Obtain the scaffolding graph in .graphml format:
